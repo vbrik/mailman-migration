@@ -3,6 +3,7 @@ import argparse
 import asyncio
 import logging
 import pickle
+import re
 import smtplib
 import sys
 
@@ -128,17 +129,26 @@ async def mailman_to_keycloak_member_import(
             await add_user_group(keycloak_group + "/_admin", username, rest_client=keycloak)
 
     all_users = await list_users(rest_client=keycloak)
-    canon_addrs = {
+    canon_addr_to_username = {
         u["attributes"]["canonical_email"]: u["username"]
         for u in all_users.values()
         if "canonical_email" in u["attributes"]
     }
 
+    allowed_non_members = []
+    email_regex = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+    for nonmember in mmcfg["accept_these_nonmembers"]:
+        if re.match(email_regex, nonmember):
+            logger.info(f"Found valid non-member address {nonmember}")
+            allowed_non_members.append(nonmember)
+        else:
+            logger.info(f"Ignoring invalid non-member email {nonmember}")
+
     send_regular_instructions_to = set()
-    for email in mmcfg["digest_members"] + mmcfg["regular_members"]:
+    for email in mmcfg["digest_members"] + mmcfg["regular_members"] + allowed_non_members:
         username, domain = email.split("@")
         if domain == "icecube.wisc.edu":
-            username = canon_addrs.get(email, username)
+            username = canon_addr_to_username.get(email, username)
             if username not in all_users:
                 logger.warning(f"Unknown user {email}")
                 send_regular_instructions_to.add(email)
@@ -147,11 +157,11 @@ async def mailman_to_keycloak_member_import(
             if not dryrun:
                 await add_user_group(keycloak_group, username, rest_client=keycloak)
         else:
-            logger.info(f"Non-icecube member {email}")
+            logger.info(f"Add non-icecube member {email} to list of instructions recipients")
             send_regular_instructions_to.add(email)
 
     for email in send_regular_instructions_to:
-        logger.info(f"Sending MEMBER instructions to {email} email_dry_run={email_dry_run}")
+        logger.info(f"Sending MEMBER instructions to {email} [email_dry_run={email_dry_run}]")
         if not dryrun and not email_dry_run:
             send_email(
                 mail_server,
@@ -168,7 +178,7 @@ async def mailman_to_keycloak_member_import(
     for email in mmcfg["owner"]:
         username, domain = email.split("@")
         if domain == "icecube.wisc.edu":
-            username = canon_addrs.get(email, username)
+            username = canon_addr_to_username.get(email, username)
             if username not in all_users:
                 logger.warning(f"Unknown owner {email}")
                 send_owner_instructions_to.add(email)
@@ -181,7 +191,7 @@ async def mailman_to_keycloak_member_import(
             send_owner_instructions_to.add(email)
 
     for email in send_owner_instructions_to:
-        logger.info(f"Sending OWNER instructions to {email} email_dry_run={email_dry_run}")
+        logger.info(f"Sending OWNER instructions to {email} [email_dry_run={email_dry_run}]")
         if not dryrun and not email_dry_run:
             send_email(
                 mail_server,

@@ -3,7 +3,6 @@ import argparse
 import sys
 import logging
 import pickle
-import re
 from pprint import pformat
 from google.oauth2 import service_account
 from googleapiclient import discovery
@@ -48,9 +47,7 @@ def get_google_group_config_from_mailman_config(mmcfg):
         "email": mmcfg["email"],
         "name": mmcfg["real_name"],
         "description": (
-            mmcfg["description"] + "\n" + mmcfg["info"]
-            if mmcfg["info"]
-            else mmcfg["description"]
+            mmcfg["description"] + "\n" + mmcfg["info"] if mmcfg["info"] else mmcfg["description"]
         ),
         "whoCanJoin": "CAN_REQUEST_TO_JOIN",
         "whoCanViewMembership": who_can_view_membership,
@@ -71,9 +68,7 @@ def get_google_group_config_from_mailman_config(mmcfg):
         # "defaultMessageDenyNotificationText": "",  # only matters if sendMessageDenyNotification is true
         "membersCanPostAsTheGroup": "false",
         "includeInGlobalAddressList": "false",  # has to do with Outlook integration
-        "whoCanLeaveGroup": (
-            "ALL_MEMBERS_CAN_LEAVE" if mmcfg["unsubscribe_policy"] else "NONE_CAN_LEAVE"
-        ),
+        "whoCanLeaveGroup": ("ALL_MEMBERS_CAN_LEAVE" if mmcfg["unsubscribe_policy"] else "NONE_CAN_LEAVE"),
         "whoCanContactOwner": "ALL_IN_DOMAIN_CAN_CONTACT",
         "favoriteRepliesOnTop": "false",
         "whoCanApproveMembers": "ALL_MANAGERS_CAN_APPROVE",
@@ -83,9 +78,7 @@ def get_google_group_config_from_mailman_config(mmcfg):
         "whoCanAssistContent": "NONE",  # has something to do with collaborative inbox
         "enableCollaborativeInbox": "false",
         "whoCanDiscoverGroup": (
-            "ALL_IN_DOMAIN_CAN_DISCOVER"
-            if mmcfg["advertised"]
-            else "ALL_MEMBERS_CAN_DISCOVER"
+            "ALL_IN_DOMAIN_CAN_DISCOVER" if mmcfg["advertised"] else "ALL_MEMBERS_CAN_DISCOVER"
         ),
         "defaultSender": "DEFAULT_SELF",
     }
@@ -94,7 +87,7 @@ def get_google_group_config_from_mailman_config(mmcfg):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Import mailman list configuration (settings and members) created\n"
+        description="Import mailman list configuration (only settings) created\n"
         "by `pickle-mailman-list.py` into Google Groups using Google API¹.",
         epilog="Notes:\n"
         "[1] The following APIs must be enabled: Admin SDK, Group Settings.\n"
@@ -103,17 +96,15 @@ def main():
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument(
-        "--list-pkl",
+        "--mailman-pickle",
         metavar="PATH",
         required=True,
         help="mailman list configuration pickle created by pickle-mailman-list.py",
     )
     parser.add_argument(
-        "--ignore",
-        metavar="EMAIL",
-        default=[],
-        nargs="*",
-        help="don't add EMAIL to group members",
+        "--controlled-mailing-list",
+        action="store_true",
+        help="override Google group settings to be compatible with the controlled mailing list paradigm",
     )
     parser.add_argument(
         "--sa-creds",
@@ -139,7 +130,7 @@ def main():
         type=int,
         default=0,
         help="index of the account in your browser's list of Google accounts that\n"
-        "has permission to edit setting of the group that will be created.\n"
+        "has permission to edit settings of the group that will be created.\n"
         "This is purely for convenience: group management URL will print out\n"
         "like https://groups.google.com/u/NUM/... (default: 0)",
     )
@@ -150,13 +141,31 @@ def main():
         format="%(levelname)s %(message)s",
     )
 
-    logging.info(f"Retrieving mailman list configuration from {args.list_pkl}")
-    with open(args.list_pkl, "rb") as f:
+    logging.info(f"Retrieving mailman list configuration from {args.mailman_pickle}")
+    with open(args.mailman_pickle, "rb") as f:
         mmcfg = pickle.load(f)
+
     logging.debug(pformat(mmcfg))
     logging.info("Converting mailman list settings to google group settings")
     ggcfg = get_google_group_config_from_mailman_config(mmcfg)
     logging.debug(pformat(ggcfg))
+
+    if args.controlled_mailing_list:
+        if ggcfg["whoCanJoin"] != "INVITED_CAN_JOIN":
+            logging.warning("Overriding whoCanJoin to be 'INVITED_CAN_JOIN'")
+            ggcfg["whoCanJoin"] = "INVITED_CAN_JOIN"
+        # XXX
+        if ggcfg["whoCanViewGroup"] != "ALL_MEMBERS_CAN_VIEW":
+            logging.warning("Overriding whoCanViewGroup to be 'ALL_MEMBERS_CAN_VIEW'")
+            ggcfg["whoCanViewGroup"] = "ALL_MEMBERS_CAN_VIEW"
+        if ggcfg["allowExternalMembers"] != "false":
+            logging.warning("Overriding allowExternalMembers to be 'false'")
+            ggcfg["allowExternalMembers"] = "false"
+        if ggcfg["whoCanLeaveGroup"] != "NONE_CAN_LEAVE":
+            logging.warning("Overriding whoCanLeaveGroup to be 'NONE_CAN_LEAVE'")
+            ggcfg["whoCanLeaveGroup"] = "NONE_CAN_LEAVE"
+
+    logging.info(f"whoCanViewGroup = {ggcfg['whoCanViewGroup']}")
     logging.info(f"whoCanViewMembership = {ggcfg['whoCanViewMembership']}")
     logging.info(f"allowExternalMembers = {ggcfg['allowExternalMembers']}")
     logging.info(f"whoCanPostMessage = {ggcfg['whoCanPostMessage']}")
@@ -179,9 +188,7 @@ def main():
         args.sa_creds, scopes=SCOPES, subject=args.sa_delegate
     )
 
-    svc = discovery.build(
-        "admin", "directory_v1", credentials=creds, cache_discovery=False
-    )
+    svc = discovery.build("admin", "directory_v1", credentials=creds, cache_discovery=False)
     try:
         logging.info(f"Creating group {ggcfg['email']}")
         svc.groups().insert(
@@ -199,9 +206,7 @@ def main():
     finally:
         svc.close()
 
-    svc = discovery.build(
-        "groupssettings", "v1", credentials=creds, cache_discovery=False
-    )
+    svc = discovery.build("groupssettings", "v1", credentials=creds, cache_discovery=False)
     try:
         logging.info(f"Configuring group {ggcfg['email']}")
         svc.groups().patch(
@@ -210,7 +215,6 @@ def main():
         ).execute()
     finally:
         svc.close()
-
 
     logging.warning("!!!   SOME GOOGLE GROUP OPTIONS CANNOT BE SET PROGRAMMATICALLY")
     addr, domain = ggcfg["email"].split("@")
