@@ -113,13 +113,19 @@ async def mailman_to_keycloak_member_import(
     keycloak_group,
     mail_server,
     required_experiments,
+    extra_admins,
     keycloak,
+    email_dry_run,
     dryrun,
 ):
     logger.info("Creating groups")
     if not dryrun:
         await create_group(keycloak_group, rest_client=keycloak)
         await create_group(keycloak_group + "/_admin", rest_client=keycloak)
+    for username in extra_admins:
+        logger.info(f"Adding extra admin {username}")
+        if not dryrun:
+            await add_user_group(keycloak_group + "/_admin", username, rest_client=keycloak)
 
     all_users = await list_users(rest_client=keycloak)
     canon_addrs = {
@@ -145,8 +151,8 @@ async def mailman_to_keycloak_member_import(
             send_regular_instructions_to.add(email)
 
     for email in send_regular_instructions_to:
-        logger.info(f"Sending MEMBER instructions to {email}")
-        if not dryrun:
+        logger.info(f"Sending MEMBER instructions to {email} email_dry_run={email_dry_run}")
+        if not dryrun and not email_dry_run:
             send_email(
                 mail_server,
                 email,
@@ -154,7 +160,7 @@ async def mailman_to_keycloak_member_import(
                 NON_ICECUBE_MEMBER_MESSAGE.format(
                     list_addr=mmcfg["email"],
                     user_addr=email,
-                    experiment_list=', '.join(required_experiments),
+                    experiment_list=", ".join(required_experiments),
                 ),
             )
 
@@ -175,8 +181,8 @@ async def mailman_to_keycloak_member_import(
             send_owner_instructions_to.add(email)
 
     for email in send_owner_instructions_to:
-        logger.info(f"Sending OWNER instructions to {email}")
-        if not dryrun:
+        logger.info(f"Sending OWNER instructions to {email} email_dry_run={email_dry_run}")
+        if not dryrun and not email_dry_run:
             send_email(
                 mail_server,
                 email,
@@ -184,7 +190,7 @@ async def mailman_to_keycloak_member_import(
                 NON_ICECUBE_OWNER_MESSAGE.format(
                     list_addr=mmcfg["email"],
                     user_addr=email,
-                    experiment_list=', '.join(required_experiments),
+                    experiment_list=", ".join(required_experiments),
                 ),
             )
 
@@ -196,9 +202,10 @@ def main():
         )
 
     parser = argparse.ArgumentParser(
-        description="XXX",
-        epilog="XXX",
-        formatter_class=__formatter(30, 90),
+        description="Import subscribers and owners of a mailman list into a KeyCloak group, "
+        "if possible. If not possible (non-IceCube email addresses), send them instructions "
+        "on what to do.",
+        formatter_class=__formatter(max_help_position=30, width=90),
     )
     parser.add_argument(
         "--mailman-pickle",
@@ -220,18 +227,11 @@ def main():
         help="experiment(s) to use in instructions emails",
     )
     parser.add_argument(
-        "--ignore",
-        metavar="EMAIL",
-        default=[],
-        nargs="*",
-        help="don't add EMAIL to group members",
-    )
-    parser.add_argument(
         "--extra-admins",
-        metavar="EMAIL",
+        metavar="USER",
+        nargs="+",
         default=[],
-        nargs="*",
-        help="add these users to the list's _admin subgroup",
+        help="add USER(s) to the _admin subgroup",
     )
     parser.add_argument(
         "--mail-server",
@@ -240,9 +240,14 @@ def main():
         help="use HOST to send instructional emails",
     )
     parser.add_argument(
+        "--email-dry-run",
+        action="store_true",
+        help="don't send any emails",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="perform a trial run with no changes made",
+        help="perform a trial run with no changes made and now emails sent",
     )
     parser.add_argument(
         "--log-level",
@@ -257,8 +262,9 @@ def main():
     handler = logging.StreamHandler()
     handler.setFormatter(ColorLoggingFormatter(dryrun=args.dry_run))
     logger.addHandler(handler)
-    ClientCredentialsAuth = logging.getLogger('ClientCredentialsAuth')
-    ClientCredentialsAuth.setLevel(logging.WARNING)
+    if args.log_level == "info":
+        ClientCredentialsAuth = logging.getLogger("ClientCredentialsAuth")
+        ClientCredentialsAuth.setLevel(logging.WARNING)  # too noisy
 
     logger.info(f"Loading mailman list configuration from {args.mailman_pickle}")
     with open(args.mailman_pickle, "rb") as f:
@@ -272,7 +278,9 @@ def main():
             args.keycloak_group,
             args.mail_server,
             args.required_experiments,
+            args.extra_admins,
             keycloak,
+            args.email_dry_run,
             args.dry_run,
         )
     )
