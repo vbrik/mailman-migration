@@ -124,12 +124,8 @@ def summarize_settings(ggcfg):
     logger.info(f"whoCanPostMessage = {ggcfg['whoCanPostMessage']}")
     logger.info(f"messageModerationLevel = {ggcfg['messageModerationLevel']}")
     logger.info(f"whoCanDiscoverGroup = {ggcfg['whoCanDiscoverGroup']}")
-    if (
-        ggcfg["whoCanPostMessage"] == "ANYONE_CAN_POST"
-        and ggcfg["messageModerationLevel"] == "MODERATE_NONE"
-        and ggcfg["allowExternalMembers"] == "true"
-    ):
-        logger.warning(f"!!!  LIST ACCEPTS MESSAGES FROM ANYBODY WITHOUT MODERATION")
+    if ggcfg["whoCanPostMessage"] == "ANYONE_CAN_POST" and ggcfg["messageModerationLevel"] == "MODERATE_NONE":
+        logger.warning("!!!  LIST ACCEPTS MESSAGES FROM ANYBODY WITHOUT MODERATION")
 
 
 def main():
@@ -269,7 +265,7 @@ def main():
     )
     if not args.controlled_mailing_list:
         logger.warning(
-            f"!!!   Consider enabling 'Include the standard Groups footer' in the 'Email options' section"
+            "!!!   Consider enabling 'Include the standard Groups footer' in the 'Email options' section"
         )
     addr, domain = ggcfg["email"].split("@")
     logger.warning(
