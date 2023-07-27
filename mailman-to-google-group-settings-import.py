@@ -1,12 +1,20 @@
 #!/usr/bin/env python
 import argparse
 import sys
-import logging
 import pickle
+import colorlog
+import logging
 from pprint import pformat
 from google.oauth2 import service_account
 from googleapiclient import discovery
 from googleapiclient.errors import HttpError
+
+
+handler = colorlog.StreamHandler()
+handler.setFormatter(colorlog.ColoredFormatter("%(log_color)s%(levelname)s:%(message)s"))
+logger = colorlog.getLogger("settings-import")
+logger.propagate = False
+logger.addHandler(handler)
 
 
 def get_google_group_config_from_mailman_config(mmcfg):
@@ -85,6 +93,45 @@ def get_google_group_config_from_mailman_config(mmcfg):
     return ggcfg
 
 
+def set_controlled_mailing_list_setting(ggcfg):
+    def _override(ggcfg, key, value):
+        if key not in ggcfg:
+            logger.warning(f"Setting {key} to be '{value}'")
+        elif ggcfg[key] != value:
+            logger.warning(f"Overriding {key} to be '{value}'")
+        ggcfg[key] = value
+
+    _override(ggcfg, "whoCanJoin", "INVITED_CAN_JOIN")
+    _override(ggcfg, "whoCanViewGroup", "ALL_MEMBERS_CAN_VIEW")
+    _override(ggcfg, "allowExternalMembers", "false")
+    _override(ggcfg, "whoCanLeaveGroup", "NONE_CAN_LEAVE")
+    _override(ggcfg, "includeCustomFooter", "true")
+    _override(
+        ggcfg,
+        "customFooterText",
+        "To unsubscribe, use group membership management interface of https://user-management.icecube.aq\n"
+        "Message archives can be found on https://groups.google.com (log in with your IceCube account)",
+    )
+    _override(ggcfg, "whoCanModerateMembers", "NONE")
+
+    return ggcfg
+
+
+def summarize_settings(ggcfg):
+    logger.info(f"whoCanViewGroup = {ggcfg['whoCanViewGroup']}")
+    logger.info(f"whoCanViewMembership = {ggcfg['whoCanViewMembership']}")
+    logger.info(f"allowExternalMembers = {ggcfg['allowExternalMembers']}")
+    logger.info(f"whoCanPostMessage = {ggcfg['whoCanPostMessage']}")
+    logger.info(f"messageModerationLevel = {ggcfg['messageModerationLevel']}")
+    logger.info(f"whoCanDiscoverGroup = {ggcfg['whoCanDiscoverGroup']}")
+    if (
+        ggcfg["whoCanPostMessage"] == "ANYONE_CAN_POST"
+        and ggcfg["messageModerationLevel"] == "MODERATE_NONE"
+        and ggcfg["allowExternalMembers"] == "true"
+    ):
+        logger.warning(f"!!!  LIST ACCEPTS MESSAGES FROM ANYBODY WITHOUT MODERATION")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Import mailman list configuration (only settings) created\n"
@@ -119,6 +166,11 @@ def main():
         help="the principal whom the service account will impersonate³",
     )
     parser.add_argument(
+        "--add-owner",
+        metavar="EMAIL",
+        help="make EMAIL list owner that doesn't receive email (to facilitate configuration)",
+    )
+    parser.add_argument(
         "--log-level",
         default="info",
         choices=("debug", "info", "warning", "error"),
@@ -141,56 +193,32 @@ def main():
         format="%(levelname)s %(message)s",
     )
 
-    logging.info(f"Retrieving mailman list configuration from {args.mailman_pickle}")
+    logger.info(f"Retrieving mailman list configuration from {args.mailman_pickle}")
     with open(args.mailman_pickle, "rb") as f:
         mmcfg = pickle.load(f)
 
-    logging.debug(pformat(mmcfg))
-    logging.info("Converting mailman list settings to google group settings")
+    logger.debug(pformat(mmcfg))
+    logger.info("Converting mailman list settings to google group settings")
     ggcfg = get_google_group_config_from_mailman_config(mmcfg)
-    logging.debug(pformat(ggcfg))
+    logger.debug(pformat(ggcfg))
 
     if args.controlled_mailing_list:
-        if ggcfg["whoCanJoin"] != "INVITED_CAN_JOIN":
-            logging.warning("Overriding whoCanJoin to be 'INVITED_CAN_JOIN'")
-            ggcfg["whoCanJoin"] = "INVITED_CAN_JOIN"
-        # XXX
-        if ggcfg["whoCanViewGroup"] != "ALL_MEMBERS_CAN_VIEW":
-            logging.warning("Overriding whoCanViewGroup to be 'ALL_MEMBERS_CAN_VIEW'")
-            ggcfg["whoCanViewGroup"] = "ALL_MEMBERS_CAN_VIEW"
-        if ggcfg["allowExternalMembers"] != "false":
-            logging.warning("Overriding allowExternalMembers to be 'false'")
-            ggcfg["allowExternalMembers"] = "false"
-        if ggcfg["whoCanLeaveGroup"] != "NONE_CAN_LEAVE":
-            logging.warning("Overriding whoCanLeaveGroup to be 'NONE_CAN_LEAVE'")
-            ggcfg["whoCanLeaveGroup"] = "NONE_CAN_LEAVE"
+        ggcfg = set_controlled_mailing_list_setting(ggcfg)
 
-    logging.info(f"whoCanViewGroup = {ggcfg['whoCanViewGroup']}")
-    logging.info(f"whoCanViewMembership = {ggcfg['whoCanViewMembership']}")
-    logging.info(f"allowExternalMembers = {ggcfg['allowExternalMembers']}")
-    logging.info(f"whoCanPostMessage = {ggcfg['whoCanPostMessage']}")
-    logging.info(f"messageModerationLevel = {ggcfg['messageModerationLevel']}")
-    logging.info(f"whoCanDiscoverGroup = {ggcfg['whoCanDiscoverGroup']}")
-    if (
-        ggcfg["whoCanPostMessage"] == "ANYONE_CAN_POST"
-        and ggcfg["messageModerationLevel"] == "MODERATE_NONE"
-        and ggcfg["allowExternalMembers"] == "true"
-    ):
-        logging.warning(f"!!!  LIST ACCEPTS MESSAGES FROM ANYBODY WITHOUT MODERATION")
+    summarize_settings(ggcfg)
 
     SCOPES = [
         "https://www.googleapis.com/auth/admin.directory.group",
         "https://www.googleapis.com/auth/admin.directory.group.member",
         "https://www.googleapis.com/auth/apps.groups.settings",
     ]
-
     creds = service_account.Credentials.from_service_account_file(
         args.sa_creds, scopes=SCOPES, subject=args.sa_delegate
     )
 
     svc = discovery.build("admin", "directory_v1", credentials=creds, cache_discovery=False)
     try:
-        logging.info(f"Creating group {ggcfg['email']}")
+        logger.info(f"Creating group {ggcfg['email']}")
         svc.groups().insert(
             body={
                 "description": ggcfg["description"],
@@ -200,7 +228,7 @@ def main():
         ).execute()
     except HttpError as e:
         if e.status_code == 409:  # entity already exists
-            logging.info("Group already exists")
+            logger.info("Group already exists")
         else:
             raise
     finally:
@@ -208,7 +236,7 @@ def main():
 
     svc = discovery.build("groupssettings", "v1", credentials=creds, cache_discovery=False)
     try:
-        logging.info(f"Configuring group {ggcfg['email']}")
+        logger.info(f"Configuring group {ggcfg['email']}")
         svc.groups().patch(
             groupUniqueId=ggcfg["email"],
             body=ggcfg,
@@ -216,15 +244,35 @@ def main():
     finally:
         svc.close()
 
-    logging.warning("!!!   SOME GOOGLE GROUP OPTIONS CANNOT BE SET PROGRAMMATICALLY")
-    addr, domain = ggcfg["email"].split("@")
-    logging.warning(
+    if args.add_owner:
+        svc = discovery.build("admin", "directory_v1", credentials=creds, cache_discovery=False)
+        members = svc.members()
+        logger.info(f"Adding owner {args.add_owner}")
+        try:
+            members.insert(
+                groupKey=ggcfg["email"],
+                body={
+                    "email": args.add_owner,
+                    "role": "MANAGER",
+                    "delivery_settings": "NONE",
+                },
+            ).execute()
+        except HttpError as e:
+            if e.status_code == 409:  # entity already exists
+                logger.error(f"User {args.add_owner} already part of the group")
+        finally:
+            svc.close()
+
+    logger.warning("!!!   SOME GOOGLE GROUP OPTIONS CANNOT BE SET PROGRAMMATICALLY")
+    logger.warning(
         f"!!!   Set 'Subject prefix' to '{mmcfg['subject_prefix'].strip()}' in the 'Email options' section"
     )
-    logging.warning(
-        f"!!!   Consider enabling 'Include the standard Groups footer' in the 'Email options' section"
-    )
-    logging.warning(
+    if not args.controlled_mailing_list:
+        logger.warning(
+            f"!!!   Consider enabling 'Include the standard Groups footer' in the 'Email options' section"
+        )
+    addr, domain = ggcfg["email"].split("@")
+    logger.warning(
         f"!!!   https://groups.google.com/u/{args.browser_google_account_index}/a/{domain}/g/{addr}/settings#email"
     )
 
