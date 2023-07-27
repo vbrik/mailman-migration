@@ -129,7 +129,7 @@ async def mailman_to_keycloak_member_import(
             await add_user_group(keycloak_group + "/_admin", username, rest_client=keycloak)
 
     all_users = await list_users(rest_client=keycloak)
-    canon_addr_to_username = {
+    username_from_canon_addr = {
         u["attributes"]["canonical_email"]: u["username"]
         for u in all_users.values()
         if "canonical_email" in u["attributes"]
@@ -148,7 +148,7 @@ async def mailman_to_keycloak_member_import(
     for email in mmcfg["digest_members"] + mmcfg["regular_members"] + allowed_non_members:
         username, domain = email.split("@")
         if domain == "icecube.wisc.edu":
-            username = canon_addr_to_username.get(email, username)
+            username = username_from_canon_addr.get(email, username)
             if username not in all_users:
                 logger.warning(f"Unknown user {email}")
                 send_regular_instructions_to.add(email)
@@ -178,7 +178,7 @@ async def mailman_to_keycloak_member_import(
     for email in mmcfg["owner"]:
         username, domain = email.split("@")
         if domain == "icecube.wisc.edu":
-            username = canon_addr_to_username.get(email, username)
+            username = username_from_canon_addr.get(email, username)
             if username not in all_users:
                 logger.warning(f"Unknown owner {email}")
                 send_owner_instructions_to.add(email)
