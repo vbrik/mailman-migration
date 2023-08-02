@@ -23,19 +23,26 @@ taken the required actions.
 
 In the near future this mailing list will become restricted to
 active members of {experiment_list} experiment(s),
-and require subscriber to use their IceCube email addresses.
+and require subscribers to either use their IceCube email address
+or configure a custom email in their profile to be used for all
+mailing lists whose member management is automated.
 
 You are currently subscribed to {list_addr} using
 {user_addr}, which is either a non-IceCube, or a disallowed email address.
 
 In order to remain subscribed to {list_addr} after enforcement
 of membership restrictions begins you must:
-(1) join the corresponding mailing list group, and,
-(2) ensure that you are a member of an institution belonging to
+(1) configure the email address you prefer to use for mailing lists
+    that are managed automatically (skip this step if you want to
+    use your IceCube address)
+(2) join the mailing list group corresponding to this list
+(3) ensure that you are a member of an institution belonging to
 one of {experiment_list} experiment(s).
 
 - Go to https://user-management.icecube.aq
 - Log in using your IceCube credentials
+- (Only if you want to use a non-Icecube email address)
+    Under "My profile", fill in 'mailing_list_email' and click "Update"
 - Under "Groups" at the bottom of the page, click "Join a group"
 - Select the appropriate group (look for prefix "/mail/")
 - Click "Submit Join Request"
@@ -65,10 +72,14 @@ a non-IceCube or a disallowed email address.
 
 In the near future this mailing list will become restricted to
 active members of {experiment_list} experiment(s),
-and only allow email addresses ending in @icecube.wisc.edu.
+and only allow either IceCube email addresses or addresses registered
+in the user profile attribute "mailing_list_email" that can be found on
+https://user-management.icecube.aq (you will receive an email
+with details if you are also a subscriber of {list_addr}).
 
-In order to remain an owner of {list_addr} after the transition,
-you must send a request to help@icecube.wisc.edu. For example:
+In order to remain an owner of {list_addr}
+after the transition, you must send a request to help@icecube.wisc.edu.
+For example:
 
 Please make <YOUR_ICECUBE_USERNAME> an administrator of the
 controlled mailing list {list_addr}.

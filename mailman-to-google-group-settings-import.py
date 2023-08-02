@@ -174,7 +174,7 @@ def main():
                 groupKey=ggcfg["email"],
                 body={
                     "email": args.add_owner,
-                    "role": "MANAGER",
+                    "role": "OWNER",
                     "delivery_settings": "NONE",
                 },
             ).execute()
