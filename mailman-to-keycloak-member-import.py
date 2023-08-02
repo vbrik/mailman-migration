@@ -18,6 +18,9 @@ You are receiving this messages because you need to take action to
 avoid disruption in delivery of messages from mailing list
 {list_addr}.
 
+Please ignore this email if it is a duplicate and you have already
+taken the required actions.
+
 In the near future this mailing list will become restricted to
 active members of {experiment_list} experiment(s),
 and require subscriber to use their IceCube email addresses.

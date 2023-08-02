@@ -24,12 +24,11 @@ def set_controlled_mailing_list_setting(ggcfg):
         if key not in cfg:
             logger.warning(f"Setting {key} to be '{value}'")
         elif cfg[key] != value:
-            logger.warning(f"Overriding {key} to be '{value}'")
+            logger.warning(f"Overriding {key} from '{cfg[key]}' to '{value}'")
         cfg[key] = value
 
     _override(ggcfg, "whoCanJoin", "INVITED_CAN_JOIN")
     _override(ggcfg, "whoCanViewGroup", "ALL_MEMBERS_CAN_VIEW")
-    _override(ggcfg, "allowExternalMembers", "false")
     _override(ggcfg, "whoCanLeaveGroup", "NONE_CAN_LEAVE")
     _override(ggcfg, "includeCustomFooter", "true")
     _override(
@@ -150,7 +149,7 @@ def main():
         ).execute()
     except HttpError as e:
         if e.status_code == 409:  # entity already exists
-            logger.info("Group already exists")
+            logger.warning("Group already exists")
         else:
             raise
     finally:
