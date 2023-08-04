@@ -13,7 +13,7 @@ from krs.token import get_rest_client
 from krs.groups import create_group, add_user_group
 from krs.users import list_users
 
-NON_ICECUBE_MEMBER_MESSAGE = """
+FULL_INSTRUCTIONS_MESSAGE = """
 You are receiving this messages because you need to take action to
 ensure uninterrupted delivery of messages from mailing list {list_addr}.
 
@@ -27,30 +27,37 @@ or configure a custom email address in their profile to be used
 for all mailing lists whose membership management is automated.
 
 You are currently subscribed to {list_addr} using
-{user_addr}, which is either a non-IceCube, or a disallowed email address.
+{user_addr}, which is either a non-IceCube, or a disallowed email
+address, or you are not a member of an institution belonging to
+{experiment_list} experiment(s).
 
 In order to remain subscribed to {list_addr} after enforcement
 of membership restrictions begins you must:
+
 (1) If you prefer to use a non-IceCube email for ALL automatically-
     managed mailing lists, you must configure it in your user profile.
     (Skip this step if you want to use your IceCube address.)
-(2) Join the mailing list group corresponding to this list.
-(3) Ensure that you are a member of an institution belonging to
-one of {experiment_list} experiment(s).
+    - Go to https://user-management.icecube.aq and log in using
+      your IceCube credentials.
+    - Under "My profile", fill in "mailing_list_email" field and
+      click "Update".
 
-- Go to https://user-management.icecube.aq and log in using
-  your IceCube credentials.
-- If you want to use a non-Icecube email address: under "My profile",
-  fill in 'mailing_list_email' field and click "Update".
-- Under "Groups" at the bottom of the page, click "Join a group"
-- Select the appropriate group (look for prefix "/mail/")
-- Click "Submit Join Request"
+(2) Ensure that you are a member of an institution belonging to
+    one of {experiment_list} experiment(s).
+    - Go to https://user-management.icecube.aq and log in using
+      your IceCube credentials.
+    - Check your experiments under "Experiments/Institutions".
+    - If necessary, click "Join an institution", select an experiment
+      and an institution, and click "Submit Join Request".
+      Wait until your request is approved before proceeding
+      to step 3.
 
-If you are not a member of an institution belonging to
-{experiment_list} experiment(s):
-- Under "Experiments/Institutions", click "Join an institution"
-- Select an experiment and an institution
-- Click "Submit Join Request"
+(3) Join the mailing list group corresponding to this list.
+    - Go to https://user-management.icecube.aq and log in using
+      your IceCube credentials.
+    - Under "Groups" at the bottom of the page, click "Join a group"
+    - Select the appropriate group (look for prefix "/mail/")
+    - Click "Submit Join Request"
 
 In order to avoid a disruption in receiving of messages from
 {list_addr} once it becomes restricted,
@@ -64,7 +71,7 @@ for requests to get approved.
 If you have questions or need help, please email help@icecube.wisc.edu.
 """
 
-NON_ICECUBE_OWNER_MESSAGE = """
+OWNER_INSTRUCTIONS_MESSAGE = """
 You are receiving this message because you are registered as an owner of
 {list_addr} using {user_addr}, which is either
 a non-IceCube or a disallowed email address.
@@ -90,6 +97,8 @@ emails, you can selectively stop mail delivery by going to
 https://groups.google.com, logging on with your IceCube account and
 changing "Subscription" value associated with {list_addr}
 from "Each email" to "No Email".
+
+If you have questions or need help, please email help@icecube.wisc.edu.
 """
 
 logger = logging.getLogger("member-import")
@@ -124,7 +133,7 @@ def send_email(smtp_host, to, subj, message):
     msg = EmailMessage()
     msg["Subject"] = subj
     msg["From"] = "no-reply@icecube.wisc.edu"
-    msg["To"] = "vbrik@icecube.wisc.edu"
+    msg["To"] = to
     msg.set_content(message)
     with smtplib.SMTP(smtp_host) as s:
         s.send_message(msg)
@@ -140,7 +149,7 @@ async def mailman_to_keycloak_member_import(
     email_dry_run,
     dryrun,
 ):
-    logger.info("Creating groups")
+    logger.info("Creating KeyCloak groups")
     if not dryrun:
         await create_group(keycloak_group, rest_client=keycloak)
         await create_group(keycloak_group + "/_admin", rest_client=keycloak)
@@ -189,7 +198,7 @@ async def mailman_to_keycloak_member_import(
                 mail_server,
                 email,
                 f"Important information about membership in mailing list {mmcfg['email']}",
-                NON_ICECUBE_MEMBER_MESSAGE.format(
+                FULL_INSTRUCTIONS_MESSAGE.format(
                     list_addr=mmcfg["email"],
                     user_addr=email,
                     experiment_list=", ".join(required_experiments),
@@ -219,7 +228,7 @@ async def mailman_to_keycloak_member_import(
                 mail_server,
                 email,
                 f"Important information about ownership of mailing list {mmcfg['email']}",
-                NON_ICECUBE_OWNER_MESSAGE.format(
+                OWNER_INSTRUCTIONS_MESSAGE.format(
                     list_addr=mmcfg["email"],
                     user_addr=email,
                     experiment_list=", ".join(required_experiments),

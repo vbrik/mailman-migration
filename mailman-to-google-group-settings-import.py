@@ -157,7 +157,7 @@ def main():
 
     svc = discovery.build("groupssettings", "v1", credentials=creds, cache_discovery=False)
     try:
-        logger.info(f"Configuring group {ggcfg['email']}")
+        logger.info(f"Configuring Google group {ggcfg['email']}")
         svc.groups().patch(
             groupUniqueId=ggcfg["email"],
             body=ggcfg,
