@@ -34,8 +34,8 @@ def set_controlled_mailing_list_setting(ggcfg):
     _override(
         ggcfg,
         "customFooterText",
-        "To unsubscribe, use group membership management interface of https://user-management.icecube.aq\n"
-        "Message archives can be found on https://groups.google.com (log in with your IceCube account)",
+        "Message archives are on https://groups.google.com (log in with your IceCube account)\n"
+        "To unsubscribe, use group membership management interface of https://user-management.icecube.aq",
     )
     _override(ggcfg, "whoCanModerateMembers", "NONE")
 

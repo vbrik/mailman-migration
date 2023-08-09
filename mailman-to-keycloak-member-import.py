@@ -158,6 +158,7 @@ async def mailman_to_keycloak_member_import(
         if not dryrun:
             await add_user_group(keycloak_group + "/_admin", username, rest_client=keycloak)
 
+    logger.info(f"Retrieving info of all users from KeyCloak")
     all_users = await list_users(rest_client=keycloak)
     username_from_canon_addr = {
         u["attributes"]["canonical_email"]: u["username"]
@@ -175,7 +176,6 @@ async def mailman_to_keycloak_member_import(
             logger.info(f"Ignoring invalid non-member email {nonmember}")
 
     send_regular_instructions_to = set()
-
     for email in mmcfg["digest_members"] + mmcfg["regular_members"] + allowed_non_members:
         username, domain = email.split("@")
         if domain == "icecube.wisc.edu":
